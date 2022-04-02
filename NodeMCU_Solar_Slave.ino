@@ -32,73 +32,75 @@ unsigned long timerDelay = 5000;
 
 void setup() {
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-  FastLED.setBrightness(64);
 
-  Serial.begin(115200); 
+  Serial.begin(115200);
 
   WiFi.begin(ssid, password);
   Serial.println("Connecting");
-  while(WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("");
   Serial.print("Connected to WiFi network with IP Address: ");
   Serial.println(WiFi.localIP());
- 
-  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
 
+  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
 }
 
 void loop() {
   // Send an HTTP POST request depending on timerDelay
   if ((millis() - lastTime) > timerDelay) {
     //Check WiFi connection status
-    if(WiFi.status()== WL_CONNECTED){
+    if (WiFi.status() == WL_CONNECTED) {
       WiFiClient client;
       HTTPClient http;
 
       String serverPath = serverName;
-      
+
       // Your Domain name with URL path or IP address with path
       http.begin(client, serverPath.c_str());
-      
+
       // Send HTTP GET request
       int httpResponseCode = http.GET();
-      
-      if (httpResponseCode>0) {
+
+      if (httpResponseCode > 0) {
         Serial.print("HTTP Response code: ");
         Serial.println(httpResponseCode);
         String payload = http.getString();
 
-        DynamicJsonDocument res(1024);
+        StaticJsonDocument<256> res;
         deserializeJson(res, payload);
         JsonObject obj = res.as<JsonObject>();
 
-      // {"ratedPower":9.1,"gridPower":249.0,"relay2Power":0.0,"feedInPower":5.0,"relay1Power":0.0,"batPower1":0.0}
+        // {"ratedPower":9.1,"gridPower":249.0,"relay2Power":0.0,"feedInPower":5.0,"relay1Power":0.0,"batPower1":0.0}
 
-      if (!obj.containsKey("gridPower")) {
-        Serial.println("Couldn't get JSON data.");
-        return;
-      }
+        if (!obj.containsKey("gridPower")) {
+          Serial.println("Couldn't get JSON data.");
+          leds[NUM_LEDS - 1] = CRGB(255, 255, 255);
+          FastLED.show();
+          return;
+        }
 
-      String gridPower = obj["gridPower"];
-      String feedInPower = obj["feedInPower"];
+        String gridPower = obj["gridPower"];
+        String feedInPower = obj["feedInPower"];
 
-      Light(feedInPower.toInt(), gridPower.toInt());
+        Light(feedInPower.toInt(), gridPower.toInt());
 
+        delay(2000);
 
-      }
-      else {
+      } else {
         Serial.print("Error code: ");
         Serial.println(httpResponseCode);
+
+        leds[NUM_LEDS - 1] = CRGB(255, 255, 255);
+        FastLED.show();
       }
 
       // Free resources
       http.end();
 
-    }
-    else {
+    } else {
       Serial.println("WiFi Disconnected");
     }
     lastTime = millis();
@@ -126,6 +128,7 @@ void Light(int FeedIn, int Grid) {
 
     if (i < solarHomeUsage) {
       leds[i] = CRGB(0, 255, 200);
+      Serial.print("Blue ");
       delay(100);
       FastLED.show();
       continue;
@@ -133,12 +136,14 @@ void Light(int FeedIn, int Grid) {
 
     else if (FeedIn < 0 && i < -feedInMapped + solarHomeUsage) {
       leds[i] = CRGB(255, 20, 0);
+      Serial.print("Orange ");
       delay(100);
       FastLED.show();  // These seperate .show()s are because of some sort of bug with ESP8266.
     }
 
     else if (FeedIn > 0 && i < feedInMapped + solarHomeUsage) {
       leds[i] = CRGB(255, 70, 0);
+      Serial.print("Yellow ");
       delay(100);
       FastLED.show();
     }
@@ -148,4 +153,5 @@ void Light(int FeedIn, int Grid) {
       FastLED.show();
     }
   }
+  Serial.println("");
 }
