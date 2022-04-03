@@ -87,7 +87,7 @@ void loop() {
 
         Light(feedInPower.toInt(), gridPower.toInt());
 
-        delay(2000);
+        delay(5000);
 
       } else {
         Serial.print("Error code: ");
@@ -124,6 +124,8 @@ void Light(int FeedIn, int Grid) {
   // Solar usage is gridPower - feedInPower when feedInPower > 0.
   int solarHomeUsage = FeedIn > 0 ? gridMapped - feedInMapped : gridMapped;
 
+  FastLED.clear();
+
   for (int i = 0; i < NUM_LEDS; i++) {
 
     if (i < solarHomeUsage) {
@@ -145,11 +147,6 @@ void Light(int FeedIn, int Grid) {
       leds[i] = CRGB(255, 70, 0);
       Serial.print("Yellow ");
       delay(100);
-      FastLED.show();
-    }
-
-    else {
-      leds[i] = CRGB(0, 0, 0);
       FastLED.show();
     }
   }
