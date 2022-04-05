@@ -1,7 +1,10 @@
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
-#include <ESP8266WebServer.h>
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+
+ESP8266WiFiMulti WiFiMulti;
 
 #include <ArduinoJson.h>
 
@@ -10,101 +13,90 @@
 #define FASTLED_ALLOW_INTERRUPTS 0
 #include <FastLED.h>
 
-#define LED_PIN 16
-#define NUM_LEDS 39
+#define LED_PIN 5
+#define NUM_LEDS 28
 CRGB leds[NUM_LEDS];
 
 #define SYSTEM_SIZE 8000  // Peak wattage of the solar system.
-
-const char *ssid = SECRET_SSID;  // WIFI Stuff
-const char *password = SECRET_WIFI_PASSWORD;
-
-//Your Domain name with URL path or IP address with path
-String serverName = LOCAL_SERVER;
-
-// the following variables are unsigned longs because the time, measured in
-// milliseconds, will quickly become a bigger number than can be stored in an int.
-unsigned long lastTime = 0;
-// Timer set to 10 minutes (600000)
-//unsigned long timerDelay = 600000;
-// Set timer to 5 seconds (5000)
-unsigned long timerDelay = 5000;
 
 void setup() {
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
 
   Serial.begin(115200);
 
-  WiFi.begin(ssid, password);
-  Serial.println("Connecting");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
+  Serial.println();
+  Serial.println();
+  Serial.println();
 
-  Serial.println("Timer set to 5 seconds (timerDelay variable), it will take 5 seconds before publishing the first reading.");
+  for (uint8_t t = 4; t > 0; t--) {
+    Serial.printf("[SETUP] WAIT %d...\n", t);
+    Serial.flush();
+    delay(1000);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP(SECRET_SSID, SECRET_WIFI_PASSWORD);
 }
 
 void loop() {
-  // Send an HTTP POST request depending on timerDelay
-  if ((millis() - lastTime) > timerDelay) {
-    //Check WiFi connection status
-    if (WiFi.status() == WL_CONNECTED) {
-      WiFiClient client;
-      HTTPClient http;
 
-      String serverPath = serverName;
+ // wait for WiFi connection
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
 
-      // Your Domain name with URL path or IP address with path
-      http.begin(client, serverPath.c_str());
+    WiFiClient client;
 
-      // Send HTTP GET request
-      int httpResponseCode = http.GET();
+    HTTPClient http;
 
-      if (httpResponseCode > 0) {
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
-        String payload = http.getString();
+    Serial.print("[HTTP] begin...\n");
+    if (http.begin(client, LOCAL_SERVER)) {  // HTTP
 
-        StaticJsonDocument<256> res;
-        deserializeJson(res, payload);
-        JsonObject obj = res.as<JsonObject>();
 
-        // {"ratedPower":9.1,"gridPower":249.0,"relay2Power":0.0,"feedInPower":5.0,"relay1Power":0.0,"batPower1":0.0}
+      Serial.print("[HTTP] GET...\n");
+      // start connection and send HTTP header
+      int httpCode = http.GET();
 
-        if (!obj.containsKey("gridPower")) {
-          Serial.println("Couldn't get JSON data.");
-          leds[NUM_LEDS - 1] = CRGB(255, 255, 255);
-          FastLED.show();
-          return;
+      // httpCode will be negative on error
+      if (httpCode > 0) {
+        // HTTP header has been send and Server response header has been handled
+        Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+        // file found at server
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+          String payload = http.getString();
+          
+          StaticJsonDocument<256> res;
+          deserializeJson(res, payload);
+          JsonObject obj = res.as<JsonObject>();
+
+          // {"ratedPower":9.1,"gridPower":249.0,"relay2Power":0.0,"feedInPower":5.0,"relay1Power":0.0,"batPower1":0.0}
+
+          if (!obj.containsKey("gridPower")) {
+            Serial.println("Couldn't get JSON data.");
+            leds[NUM_LEDS - 1] = CRGB(255, 255, 255);
+            FastLED.show();
+            return;
+          }
+
+          Light(obj["feedInPower"].as<signed int>(), obj["gridPower"].as<signed int>());
+
         }
-
-        String gridPower = obj["gridPower"];
-        String feedInPower = obj["feedInPower"];
-
-        Light(feedInPower.toInt(), gridPower.toInt());
-
-        delay(5000);
-
       } else {
-        Serial.print("Error code: ");
-        Serial.println(httpResponseCode);
+        Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
 
-        leds[NUM_LEDS - 1] = CRGB(255, 255, 255);
+        leds[NUM_LEDS-1].setRGB( 255, 255, 255);
         FastLED.show();
       }
 
-      // Free resources
       http.end();
-
     } else {
-      Serial.println("WiFi Disconnected");
+      Serial.printf("[HTTP} Unable to connect\n");
+
+      leds[NUM_LEDS-1].setRGB( 255, 255, 255);
+      FastLED.show();
     }
-    lastTime = millis();
   }
+
+  delay(10000);
 }
 
 void Light(int FeedIn, int Grid) {
@@ -118,37 +110,31 @@ void Light(int FeedIn, int Grid) {
   Serial.print("FeedIn Mapped: ");
   Serial.println(feedInMapped);
 
-  Serial.println("__________");
-
   // {"ratedPower":9.1,"gridPower":249.0,"relay2Power":0.0,"feedInPower":5.0,"relay1Power":0.0,"batPower1":0.0}
   // Solar usage is gridPower - feedInPower when feedInPower > 0.
   int solarHomeUsage = FeedIn > 0 ? gridMapped - feedInMapped : gridMapped;
 
-  FastLED.clear();
+  for (int dot = 0; dot < NUM_LEDS; dot++) {
 
-  for (int i = 0; i < NUM_LEDS; i++) {
-
-    if (i < solarHomeUsage) {
-      leds[i] = CRGB(0, 255, 200);
-      Serial.print("Blue ");
-      delay(100);
-      FastLED.show();
+    if (dot < solarHomeUsage) {
+      leds[dot].setRGB( 0, 200, 255);
       continue;
     }
 
-    else if (FeedIn < 0 && i < -feedInMapped + solarHomeUsage) {
-      leds[i] = CRGB(255, 20, 0);
-      Serial.print("Orange ");
-      delay(100);
-      FastLED.show();  // These seperate .show()s are because of some sort of bug with ESP8266.
+    else if (FeedIn < 0 && dot < -feedInMapped + solarHomeUsage) {
+      leds[dot].setRGB( 255, 20, 0);
     }
 
-    else if (FeedIn > 0 && i < feedInMapped + solarHomeUsage) {
-      leds[i] = CRGB(255, 70, 0);
-      Serial.print("Yellow ");
-      delay(100);
-      FastLED.show();
+    else if (FeedIn > 0 && dot < feedInMapped + solarHomeUsage) {
+      leds[dot].setRGB( 255, 70, 0);
     }
+
+    else {
+      leds[dot].setRGB( 0, 0, 0);
+    }
+
   }
-  Serial.println("");
+  FastLED.delay(500);
+  FastLED.show();
+  FastLED.delay(500);
 }
