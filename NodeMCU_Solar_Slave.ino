@@ -25,14 +25,14 @@ void setup() {
   Serial.begin(115200);
 
   Serial.println();
-  Serial.println();
-  Serial.println();
 
-  for (uint8_t t = 4; t > 0; t--) {
-    Serial.printf("[SETUP] WAIT %d...\n", t);
-    Serial.flush();
-    delay(1000);
-  }
+  leds[NUM_LEDS-1].setRGB( 255, 0, 0);
+  FastLED.show();
+
+  Serial.printf("[SETUP] WAIT...\n");
+  Serial.flush();
+  delay(1000);
+  
 
   WiFi.mode(WIFI_STA);
   WiFiMulti.addAP(SECRET_SSID, SECRET_WIFI_PASSWORD);
@@ -61,7 +61,7 @@ void loop() {
         Serial.printf("[HTTP] GET... code: %d\n", httpCode);
 
         // file found at server
-        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+        if (httpCode == HTTP_CODE_OK) {
           String payload = http.getString();
           
           StaticJsonDocument<256> res;
@@ -74,6 +74,7 @@ void loop() {
             Serial.println("Couldn't get JSON data.");
             leds[NUM_LEDS - 1] = CRGB(255, 255, 255);
             FastLED.show();
+            http.end();
             return;
           }
 
@@ -83,7 +84,10 @@ void loop() {
       } else {
         Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
 
-        leds[NUM_LEDS-1].setRGB( 255, 255, 255);
+        leds[NUM_LEDS-1].setRGB( 0, 255, 0);
+        FastLED.show();
+        FastLED.delay(500);
+        leds[NUM_LEDS-1].setRGB( 0, 0, 0);
         FastLED.show();
       }
 
@@ -91,12 +95,15 @@ void loop() {
     } else {
       Serial.printf("[HTTP} Unable to connect\n");
 
-      leds[NUM_LEDS-1].setRGB( 255, 255, 255);
+      leds[NUM_LEDS-1].setRGB( 0, 0, 255);
+      FastLED.show();
+      FastLED.delay(500);
+      leds[NUM_LEDS-1].setRGB( 0, 0, 0);
       FastLED.show();
     }
   }
 
-  delay(10000);
+  delay(30000);
 }
 
 void Light(int FeedIn, int Grid) {
@@ -118,23 +125,28 @@ void Light(int FeedIn, int Grid) {
 
     if (dot < solarHomeUsage) {
       leds[dot].setRGB( 0, 200, 255);
+      FastLED.delay(100);
+      FastLED.show();
       continue;
     }
 
     else if (FeedIn < 0 && dot < -feedInMapped + solarHomeUsage) {
       leds[dot].setRGB( 255, 20, 0);
+      FastLED.delay(100);
+      FastLED.show();
     }
 
     else if (FeedIn > 0 && dot < feedInMapped + solarHomeUsage) {
       leds[dot].setRGB( 255, 70, 0);
+      FastLED.delay(100);
+      FastLED.show();
     }
 
     else {
       leds[dot].setRGB( 0, 0, 0);
+      FastLED.delay(25);
+      FastLED.show();
     }
 
   }
-  FastLED.delay(500);
-  FastLED.show();
-  FastLED.delay(500);
 }
