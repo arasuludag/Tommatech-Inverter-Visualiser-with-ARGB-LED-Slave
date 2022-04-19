@@ -24,27 +24,27 @@ void setup() {
 
   Serial.begin(115200);
 
-  Serial.println();
-
   leds[NUM_LEDS-1].setRGB( 255, 0, 0);
   FastLED.show();
 
-  Serial.printf("[SETUP] WAIT...\n");
-  Serial.flush();
+  WiFi.mode(WIFI_OFF);  //Prevents reconnection issue (taking too long to connect)
   delay(1000);
-  
+  WiFi.mode(WIFI_STA);  //Only Station No AP, This line hides the viewing of ESP as wifi hotspot
 
-  WiFi.mode(WIFI_STA);
-  WiFiMulti.addAP(SECRET_SSID, SECRET_WIFI_PASSWORD);
+  WiFi.begin(SECRET_SSID, SECRET_WIFI_PASSWORD);  //Connect to your WiFi router
+  Serial.println("\n");
+  Serial.print("Connecting");
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
 }
 
 void loop() {
 
- // wait for WiFi connection
-  if ((WiFiMulti.run() == WL_CONNECTED)) {
-
     WiFiClient client;
-
     HTTPClient http;
 
     Serial.print("[HTTP] begin...\n");
@@ -86,9 +86,6 @@ void loop() {
 
         leds[NUM_LEDS-1].setRGB( 0, 255, 0);
         FastLED.show();
-        FastLED.delay(500);
-        leds[NUM_LEDS-1].setRGB( 0, 0, 0);
-        FastLED.show();
       }
 
       http.end();
@@ -97,12 +94,8 @@ void loop() {
 
       leds[NUM_LEDS-1].setRGB( 0, 0, 255);
       FastLED.show();
-      FastLED.delay(500);
-      leds[NUM_LEDS-1].setRGB( 0, 0, 0);
-      FastLED.show();
     }
-  }
-
+  
   delay(30000);
 }
 
